@@ -86,13 +86,13 @@ async function runPaymentIntegrationTests() {
     // Generate proper signature for testing
     const body = `${orderData.razorpayOrderId}|pay_test_123456789`;
     const signature = crypto
-      .createHmac('sha256', 'test_secret_key_1234567890')
+      .createHmac('sha256', 'MoMsNh5nHaMJsyDFGytRoPrn')
       .update(body)
       .digest('hex');
     
     const verifyData = {
       razorpay_order_id: orderData.razorpayOrderId,
-      razorpay_payment_id: 'pay_test_123456789',
+      razorpay_payment_id: 'rzp_live_QaRQQaRXG1qCUS',
       razorpay_signature: signature,
       order_id: orderData.id
     };
