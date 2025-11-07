@@ -27,7 +27,7 @@ export const getBlogs = async (req: Request, res: Response): Promise<void> => {
 
     // Only show published blogs for non-admin users
     if (req.user?.role !== 'admin') {
-      filter.isPublished = true;
+      filter.status = "published";
     } else if (published !== undefined) {
       filter.isPublished = published;
     }
@@ -103,7 +103,8 @@ export const getBlogById = async (req: Request, res: Response): Promise<void> =>
 
     // Only show published blogs for non-admin users
     if (req.user?.role !== 'admin') {
-      filter.isPublished = true;
+      //filter.status = "published";
+      filter.status = "published";
     }
 
     const blog = await Blog.findOne(filter)
@@ -246,7 +247,7 @@ export const getCategories = async (req: Request, res: Response): Promise<void> 
 
     // Only show published blogs for non-admin users
     if (req.user?.role !== 'admin') {
-      filter.isPublished = true;
+      filter.status = "published";
     }
 
     const categories = await Blog.distinct('category', filter);
@@ -272,7 +273,7 @@ export const getAuthors = async (req: Request, res: Response): Promise<void> => 
 
     // Only show published blogs for non-admin users
     if (req.user?.role !== 'admin') {
-      filter.isPublished = true;
+      filter.status = "published";
     }
 
     const authors = await Blog.distinct('author', filter);
@@ -300,7 +301,9 @@ export const getFeaturedBlogs = async (req: Request, res: Response): Promise<voi
 
     // Only show published blogs for non-admin users
     if (req.user?.role !== 'admin') {
-      filter.isPublished = true;
+      //filter.isPublished = true;
+      filter.status = "published";
+
     }
 
     const blogs = await Blog.find(filter)
@@ -340,7 +343,8 @@ export const getRelatedBlogs = async (req: Request, res: Response): Promise<void
 
     // Only show published blogs for non-admin users
     if (req.user?.role !== 'admin') {
-      filter.isPublished = true;
+      //filter.isPublished = true;
+      filter.status = "published";
     }
 
     // Find related blogs by category, tags, and author

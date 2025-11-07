@@ -1,6 +1,8 @@
 // Comprehensive Razorpay Payment Integration Test
 const crypto = require('crypto');
-const BASE_URL = 'http://localhost:5000';
+//const BASE_URL = 'http://localhost:5000';
+const BASE_URL = 'https://pranam-app-1.onrender.com';
+
 
 async function testEndpoint(method, url, data = null, headers = {}) {
   try {
