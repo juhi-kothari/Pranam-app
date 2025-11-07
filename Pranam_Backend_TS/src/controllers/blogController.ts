@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { validationResult } from 'express-validator';
-import { Blog, Comment } from '@/models';
+import Blog from '@/models/Blog';
+import Comment from '@/models/Comment';
 import { CustomError } from '@/middleware/errorHandler';
 import { logger } from '@/utils/logger';
 import { ApiResponse, BlogFilters } from '@/types';
@@ -24,18 +25,18 @@ export const getBlogs = async (req: Request, res: Response): Promise<void> => {
 
     const filter: any = {};
 
-    // Only show published blogs for non-admin users
-    if (req.user?.role !== 'admin') {
+    // Show only published blogs for non-admins
+    if (!req.user || req.user?.role !== 'admin') {
       filter.isPublished = true;
-    } else {
-      filter.isPublished = published === 'true';
-    }
+    } 
 
     if (author) filter.author = new RegExp(author as string, 'i');
     if (category) filter.category = category;
     if (tags && Array.isArray(tags)) filter.tags = { $in: tags };
 
-    const sortField = sort || 'date';
+    const allowedSortFields = ['date', 'readCount', 'likes', 'title'];
+    const sortField = allowedSortFields.includes(sort) ? sort : 'date';
+
     const sortObj: any = {};
     sortObj[sortField] = order === 'asc' ? 1 : -1;
 
@@ -46,19 +47,20 @@ export const getBlogs = async (req: Request, res: Response): Promise<void> => {
     let query;
 
     if (search) {
-      query = Blog.find({
-        ...filter,
-        $text: { $search: search },
-      }, { score: { $meta: 'textScore' } })
-        .sort({ score: { $meta: 'textScore' }, ...sortObj });
+      query = Blog.find(
+        { ...filter, $text: { $search: search } },
+        { score: { $meta: 'textScore' } }
+      ).sort({ score: { $meta: 'textScore' }, ...sortObj });
     } else {
       query = Blog.find(filter).sort(sortObj);
     }
 
     const [blogs, total] = await Promise.all([
-      query.skip(skip).limit(limitNum)
+      query
+        .skip(skip)
+        .limit(limitNum)
         .populate('comments', 'name text createdAt isApproved')
-        .lean(),
+        .lean({ virtuals: true }),
       Blog.countDocuments(filter),
     ]);
 
@@ -90,27 +92,24 @@ export const getBlogById = async (req: Request, res: Response): Promise<void> =>
     const { id } = req.params;
     const filter: any = { _id: id };
 
-    if (req.user?.role !== 'admin') {
-      filter.isPublished = true;
-    }
+    if (!req.user || req.user?.role !== 'admin') filter.isPublished = true;
 
-    const blog = await Blog.findOne(filter)
-      .populate({
-        path: 'comments',
-        match: { isApproved: true, parentComment: { $exists: false } },
-        options: { sort: { createdAt: -1 } },
-        populate: {
-          path: 'replies',
-          match: { isApproved: true },
-          options: { sort: { createdAt: 1 } },
-        },
-      });
+    const blog = await Blog.findOne(filter).populate({
+      path: 'comments',
+      match: { isApproved: true, parentComment: { $exists: false } },
+      options: { sort: { createdAt: -1 } },
+      populate: {
+        path: 'replies',
+        match: { isApproved: true },
+        options: { sort: { createdAt: 1 } },
+      },
+    });
 
     if (!blog) throw new CustomError('Blog not found', 404);
 
     await blog.incrementReadCount();
 
-    res.json({ success: true, data: blog });
+    res.json({ success: true, data: blog.toObject({ virtuals: true }) });
   } catch (error) {
     logger.error('Get blog by ID error:', error);
     throw error;
@@ -190,7 +189,7 @@ export const deleteBlog = async (req: Request, res: Response): Promise<void> => 
 export const getCategories = async (req: Request, res: Response): Promise<void> => {
   try {
     const filter: any = {};
-    if (req.user?.role !== 'admin') filter.isPublished = true;
+    if (!req.user || req.user?.role !== 'admin') filter.isPublished = true;
 
     const categories = await Blog.distinct('category', filter);
     res.json({ success: true, data: categories.sort() });
@@ -206,7 +205,7 @@ export const getCategories = async (req: Request, res: Response): Promise<void> 
 export const getAuthors = async (req: Request, res: Response): Promise<void> => {
   try {
     const filter: any = {};
-    if (req.user?.role !== 'admin') filter.isPublished = true;
+    if (!req.user || req.user?.role !== 'admin') filter.isPublished = true;
 
     const authors = await Blog.distinct('author', filter);
     res.json({ success: true, data: authors.sort() });
@@ -223,9 +222,13 @@ export const getFeaturedBlogs = async (req: Request, res: Response): Promise<voi
   try {
     const limit = Math.min(10, Math.max(1, Number(req.query.limit) || 5));
     const filter: any = {};
-    if (req.user?.role !== 'admin') filter.isPublished = true;
+    if (!req.user || req.user?.role !== 'admin') filter.isPublished = true;
 
-    const blogs = await Blog.find(filter).sort({ readCount: -1, date: -1 }).limit(limit).lean();
+    const blogs = await Blog.find(filter)
+      .sort({ readCount: -1, date: -1 })
+      .limit(limit)
+      .lean({ virtuals: true });
+
     res.json({ success: true, data: blogs });
   } catch (error) {
     logger.error('Get featured blogs error:', error);
@@ -245,7 +248,7 @@ export const getRelatedBlogs = async (req: Request, res: Response): Promise<void
     if (!blog) throw new CustomError('Blog not found', 404);
 
     const filter: any = { _id: { $ne: id } };
-    if (req.user?.role !== 'admin') filter.isPublished = true;
+    if (!req.user || req.user?.role !== 'admin') filter.isPublished = true;
 
     const relatedBlogs = await Blog.find({
       ...filter,
@@ -257,7 +260,7 @@ export const getRelatedBlogs = async (req: Request, res: Response): Promise<void
     })
       .sort({ readCount: -1, date: -1 })
       .limit(limit)
-      .lean();
+      .lean({ virtuals: true });
 
     res.json({ success: true, data: relatedBlogs });
   } catch (error) {
@@ -275,9 +278,11 @@ export const likeBlog = async (req: Request, res: Response): Promise<void> => {
     const blog = await Blog.findById(id);
     if (!blog) throw new CustomError('Blog not found', 404);
 
-    if (!blog.isPublished && req.user?.role !== 'admin') throw new CustomError('Blog not found', 404);
+    if (!blog.isPublished && (!req.user || req.user?.role !== 'admin'))
+      throw new CustomError('Blog not found', 404);
 
     await blog.incrementLikes();
+
     res.json({ success: true, message: 'Blog liked successfully', data: { likes: blog.likes } });
   } catch (error) {
     logger.error('Like blog error:', error);
