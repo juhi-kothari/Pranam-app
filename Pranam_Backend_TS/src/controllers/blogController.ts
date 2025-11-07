@@ -103,7 +103,6 @@ export const getBlogById = async (req: Request, res: Response): Promise<void> =>
 
     // Only show published blogs for non-admin users
     if (req.user?.role !== 'admin') {
-      //filter.status = "published";
       filter.status = "published";
     }
 
